@@ -61,44 +61,54 @@ function parseVendorCSV(text) {
     return vendorInputMap;
 }
 
+// 1. Master CSV Upload
 document.getElementById('uploadMasterBtn').addEventListener('click', async function() {
     const fileInput = document.getElementById('masterCsvFile');
     const progressDiv = document.getElementById('uploadProgress');
 
     if (!fileInput.files || fileInput.files.length === 0) {
-        alert('پہلے ماسٹر شیٹ کی CSV فائل منتخب کریں!');
+        alert('Pehle master sheet ki CSV file select karein!');
         return;
     }
 
     const file = fileInput.files[0];
     const reader = new FileReader();
-    progressDiv.textContent = 'فائل پڑھی جا رہی ہے...';
+    progressDiv.textContent = 'File read ho rahi hai...';
 
     reader.onload = async function(e) {
         const records = parseMasterCSV(e.target.result);
         if (records.length === 0) {
-            alert('فائل میں کوئی درست ڈیٹا نہیں ملا!');
+            alert('File mein koi valid data nahi mila!');
             progressDiv.textContent = '';
             return;
         }
 
-        progressDiv.textContent = `کل ${records.length} ریکارڈز ملے، اپ لوڈ ہو رہے ہیں...`;
+        progressDiv.textContent = `Kul ${records.length} records mile, upload ho rahe hain...`;
         try {
+            // Updated endpoint for Worker/Pages routing
             const response = await fetch('/api/links', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(records)
             });
-            const result = await response.json();
+
+            const textResponse = await response.text();
+            let result;
+            try {
+                result = JSON.parse(textResponse);
+            } catch (err) {
+                throw new Error('Server response invalid hai: ' + textResponse.substring(0, 100));
+            }
+
             if (response.ok) {
-                progressDiv.textContent = `کامیابی! کل ${result.count} ریکارڈز D1 میں سیو ہو گئے ✅`;
+                progressDiv.textContent = `Kamiyabi! Kul ${result.count} records save ho gaye ✅`;
                 fileInput.value = '';
             } else {
-                alert('خرابی: ' + (result.error || 'Unknown'));
+                alert('Error: ' + (result.error || 'Unknown'));
                 progressDiv.textContent = '';
             }
         } catch (err) {
-            alert('کنکشن فیل: ' + err.message);
+            alert('Connection Failed: ' + err.message);
             progressDiv.textContent = '';
         }
     };
@@ -110,7 +120,7 @@ function renderTable(filterType = 'ALL') {
     let filtered = filterType === 'ALL' ? globalResults : globalResults.filter(r => r.status === filterType);
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">کوئی ڈیٹا موجود نہیں۔</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">Is category mein koi data mojood nahi.</td></tr>';
         return;
     }
 
@@ -124,7 +134,7 @@ function renderTable(filterType = 'ALL') {
                 <td class="py-3 px-4 text-slate-700">${r.dbPrice > 0 ? '$' + r.dbPrice : '-'}</td>
                 <td class="py-3 px-4 font-semibold text-slate-600">${r.vendorPrice > 0 ? '$' + r.vendorPrice : '-'}</td>
                 <td class="py-3 px-4 text-center">
-                    <button onclick="navigator.clipboard.writeText('${r.url}'); alert('کاپی ہو گیا');" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded text-xs font-medium cursor-pointer">کاپی</button>
+                    <button onclick="navigator.clipboard.writeText('${r.url}'); alert('Copy ho gaya');" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded text-xs font-medium cursor-pointer">Copy</button>
                 </td>
             </tr>
         `;
@@ -134,38 +144,46 @@ function renderTable(filterType = 'ALL') {
     const titleEl = document.getElementById('tableTitle');
     const showAllBtn = document.getElementById('showAllBtn');
     if (filterType === 'ALL') {
-        titleEl.textContent = 'ویریفیکیشن رپورٹ (تمام رزلٹس)';
+        titleEl.textContent = 'Verification Report (All Results)';
         showAllBtn.classList.add('hidden');
     } else {
-        titleEl.textContent = `ویریفیکیشن رپورٹ - فلٹر: ${filterType}`;
+        titleEl.textContent = `Verification Report - Filter: ${filterType}`;
         showAllBtn.classList.remove('hidden');
     }
 }
 
+// 2. Vendor Bulk CSV Upload & Verification
 document.getElementById('verifyCsvBtn').addEventListener('click', async function() {
     const inputVendor = document.getElementById('vendorNameInput').value.trim().toLowerCase();
     const fileInput = document.getElementById('vendorCsvFile');
     const progressDiv = document.getElementById('verifyProgress');
 
     if (!inputVendor || !fileInput.files[0]) {
-        alert('وینڈر کا نام اور CSV فائل دونوں لازمی ہیں!');
+        alert('Vendor ka naam aur CSV file dono lazmi hain!');
         return;
     }
 
     const reader = new FileReader();
-    progressDiv.textContent = 'فائل پراسیس ہو رہی ہے...';
+    progressDiv.textContent = 'Vendor file process ho rahi hai...';
 
     reader.onload = async function(e) {
         const vendorMap = parseVendorCSV(e.target.result);
         if (vendorMap.size === 0) {
-            alert('فائل میں کوئی URL نہیں ملا!');
+            alert('File mein koi valid URL nahi mila!');
             progressDiv.textContent = '';
             return;
         }
 
         try {
             const response = await fetch('/api/links');
-            const dbRecords = await response.json();
+            const textResponse = await response.text();
+            let dbRecords;
+            try {
+                dbRecords = JSON.parse(textResponse);
+            } catch (err) {
+                throw new Error('Server response invalid hai: ' + textResponse.substring(0, 100));
+            }
+
             const dbMap = new Map();
 
             if (Array.isArray(dbRecords)) {
@@ -208,23 +226,23 @@ document.getElementById('verifyCsvBtn').addEventListener('click', async function
                 copyMissingBtn.classList.remove('hidden');
                 copyMissingBtn.onclick = () => {
                     navigator.clipboard.writeText(globalResults.filter(r => r.status === 'Missing').map(r => r.url).join('\n'));
-                    alert('مسنگ لنکس کاپی ہو گئے!');
+                    alert('Missing links copy ho gaye!');
                 };
             } else { copyMissingBtn.classList.add('hidden'); }
 
             if (misCount > 0) {
                 copyMismatchBtn.classList.remove('hidden');
                 copyMismatchBtn.onclick = () => {
-                    navigator.clipboard.writeText(globalResults.filter(r => r.status === 'Mismatch').map(r => `${r.url}, ${r.vendorPrice}`).join('\n'));
-                    alert('ڈفرنسز کاپی ہو گئے!');
+                    navigator.clipboard.writeTest ? navigator.clipboard.writeText(globalResults.filter(r => r.status === 'Mismatch').map(r => `${r.url}, ${r.vendorPrice}`).join('\n')) : '';
+                    alert('Price differences copy ho gaye!');
                 };
             } else { copyMismatchBtn.classList.add('hidden'); }
 
             renderTable('ALL');
-            progressDiv.textContent = 'ویریفیکیشن مکمل ہو گئی! ✅';
+            progressDiv.textContent = 'Verification mukammal ho gayi! ✅';
             fileInput.value = '';
         } catch (err) {
-            alert('ایرر: ' + err.message);
+            alert('Error: ' + err.message);
             progressDiv.textContent = '';
         }
     };
